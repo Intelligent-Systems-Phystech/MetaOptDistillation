@@ -2,6 +2,8 @@
 \usepackage{jmlda}
 \newcommand{\hdir}{.}
 
+\input{math_symbols}
+
 \begin{document}
 
 \title
@@ -44,15 +46,116 @@
 
 В работе рассматривается вид задачи оптимизации, а также различные виды оператора оптимизации. Данный подход с использованием нейросети LSTM описан в работе \cite{journals/corr/AndrychowiczDGH16}. Вычислительный эксперимент проводится на выборке изображений CIFAR-10.
 
-\section{Название раздела}
-Данный документ демонстрирует оформление статьи,
-подаваемой в электронную систему подачи статей \url{http://jmlda.org/papers} для публикации в журнале <<Машинное обучение и анализ данных>>.
-Более подробные инструкции по~стилевому файлу \texttt{jmlda.sty} и~использованию издательской системы \LaTeXe\
-находятся в~документе \texttt{authors-guide.pdf}.
-Работу над статьёй удобно начинать с~правки \TeX-файла данного документа.
+\section{Постановка задачи}
+Решается задача классификации вида:
 
-Обращаем внимание, что данный документ должен быть сохранен в кодировке~\verb'UTF-8 without BOM'.
-Для смены кодировки рекомендуется пользоваться текстовыми редакторами \verb'Sublime Text' или \verb'Notepad++'.
+\begin{equation} \label{eq:data}
+    \fD = \{(\bx_i, y_i)\}_{i=1}^{m},\; \bx_i \in \bbR^n,\; y_i \in \bbY = \{1, \dots, K\},
+\end{equation}
+
+\noindent
+где $y_i$ — это класс объекта, также будем обозначать $\by_i$ вектором вероятности для
+класса $y_i$.
+
+Разобьем выборку следующим образом:
+
+\begin{equation} \label{eq:split}
+    \fD = \fD_\text{train} \sqcup \fD_\text{val}.
+\end{equation}
+
+Подвыборку $\fD_\text{train}$ будем использовать для оптимизации параметров модели, а подвыборку $\fD_\text{val}$ --- для оптимизации гиперпараметров.
+
+В качестве внешнего критерия качества рассматривается доля правильных ответов:
+
+\begin{equation} \label{eq:accuracy}
+    accuracy = \frac{1}{m}\sum\limits_{i=1}^m [\bg(\bx_i, \bw) = y_i],
+\end{equation}
+
+\noindent
+где $\bg$ --- параметрическая модель классификации с параметрами $\bw$.
+
+Пусть задана модель учителя $\bff$. Функция потерь $\cL_\text{train}$, в которой учитывается перенос информации от модели учителя $\bff$ к модели ученика $\bg$, имеет следующий вид:
+
+\begin{equation} \label{eq:l_train}
+    \cL_\text{train}(\bw, \bh) = -\sum\limits_{(\bx, y) \in \fD_\text{train}}\underbrace{\sum\limits_{k=1}^{K}y^k\log \bg(\bx, \bw)|_{T=1}}_{\text{исходная функция потерь}} - \beta\sum\limits_{(\bx, y) \in \fD_\text{train}}\underbrace{\sum\limits_{k=1}^{K}\bff(\bx)|_{T=T_0}\log \bg(\bx, \bw)|_{T=T_0}}_{\text{слагаемое дистилляции}},
+\end{equation}
+
+\noindent
+где $T$ --- параметр температуры. Параметр температуры $T$ имеет следующие свойства:
+
+\begin{itemize}
+    \item[1)] при $T \rightarrow 0$ получаем вектор, в котором один из классов имеет единичную вероятность;
+    \item[2)] при $T \rightarrow \infty$ получаем равновероятные классы.
+\end{itemize}
+
+\noindent
+Выражение $\cdot |_{T=t}$ обозначает, что параметр температуры $T$ в предыдущей функции равняется $t$.
+
+Зададим множество гиперпараметров $\bh$ как вектор, состоящий из температуры и коэффициента перед слагаемым дистилляции:
+
+\[\bh = [\beta, T].\]
+
+Итоговая оптимизационная задача выглядит следующим образом:
+
+\begin{equation} \label{eq:opt_hyp}
+    \hat{\bh} = \argmax\limits_{\bh \in \bbR^2} \cL_\text{val}(\hat{\bw}, \bh),
+\end{equation}
+
+\begin{equation} \label{eq:opt_param}
+    \hat{\bw} = \argmin\limits_{\bw \in \bbR^s} \cL_\text{train}(\bw, \bh),
+\end{equation}
+
+\noindent
+где функция $\cL_\text{val}$ определяется следующим образом: 
+ \begin{equation} \label{eq:l_val}
+     \cL_\text{val}(\bw, \bh) = \sum\limits_{(\bx, y) \in \fD_\text{val}}\sum\limits_{k=1}^{K}y^k\log \bg(\bx, \bw)|_{T=1}.
+ \end{equation}
+
+\textbf{Определение 1.} Назовем оператором оптимизации алгоритм $U$ выбора вектора параметров $\bw^\prime$ по параметрам предыдущего шага $\bw$:
+
+\begin{equation*}
+    \bw^\prime = U(\bw).
+\end{equation*}
+
+\subsection{Градиентные методы оптимизации параметров дистилляции модели}
+
+Примером оператора оптимизации выступает оператор градиентного спуска:
+
+\begin{equation} \label{eq:operator}
+    U(\bw, \bh) = \bw - \gamma\nabla\cL_\text{train}(\bw, \bh),
+\end{equation}
+
+\noindent
+где $\bh$ --- совокупность гиперпараметров модели, $\gamma$ — длина шага градиентного спуска.
+
+Оптимизируем параметры $\bw$ при помощи $\eta$ шагов градиентного спуска:
+
+\begin{equation} \label{eq:oper_superp}
+    \hat{\bw} = U \circ U \circ \dots \circ U(\bw_0, \bh) = U^\eta(\bw_0, \bh),
+\end{equation}
+
+\noindent
+где $\bw_0$ --- начальное значение вектора параметров $\bw$.
+
+Переопределим задачу минимизации согласно определению оператора $U$:
+
+\begin{equation} \label{eq:hyp_oper}
+    \hat{\bh} = \argmax\limits_{\bh \in \bbR^2} \cL_\text{val}(U^\eta(\bw_0, \bh)).
+\end{equation}
+
+Решим задачу \eqref{eq:hyp_oper} используя градиентный метод. Схема оптимизации гиперпараметров:
+
+\begin{enumerate}
+    \item Для каждого $i = \overline{0, l}$, где $l$ --- количество итераций, используемых для оптимизации гиперпараметров:
+    \item Решим задачу \eqref{eq:hyp_oper} и получим новое значение гиперпараметров $\bh^\prime$.
+    \item Положим $\bh = \bh^\prime$.
+\end{enumerate}
+
+Будем обновлять гиперпараметры $\bh$, используя метод градиентного спуска, который зависит только от значений параметров $\bw$ на предыдущем шаге. На каждой итерации получим следующее значение гиперпараметров:
+
+\begin{equation} \label{eq:hyp_alg}
+    \bh^\prime = \bh - \gamma_{\bh}\nabla_{\bh}\cL_\text{val}(U(\bw, \bh), \bh) = \bh - \gamma_{\bh}\nabla_{\bh}\cL_\text{val}(\bw - \gamma\nabla\cL_\text{train}(\bw, \bh), \bh).
+\end{equation}
 
 \paragraph{Название параграфа}
 Разделы и~параграфы, за исключением списков литературы, нумеруются.
