@@ -5,7 +5,7 @@ import torchvision.datasets as dset
 import torchvision.transforms as transforms
 
 
-def cifar10_loader(data_path='../data', batch_size=128, maxsize=-1):
+def cifar10_loader(data_path='../data', batch_size=128, split_train_val=False, maxsize=-1):
     """
     Loads the cifar10 dataset in torch-ready format
     :param data_path:
@@ -28,7 +28,11 @@ def cifar10_loader(data_path='../data', batch_size=128, maxsize=-1):
     if maxsize > 0:
         train_data = torch.utils.data.Subset(train_data, list(range(maxsize)))
         train_data_original = torch.utils.data.Subset(train_data_original, list(range(maxsize)))  
-        
+       
+    if split_train_val:
+        valid_data_original = torch.utils.data.Subset(train_data_original, list(range(maxsize//2, maxsize)))
+        train_data_original = torch.utils.data.Subset(train_data_original, list(range(maxsize//2)))  
+     
     test_data = dset.CIFAR10(data_path, train=False, transform=test_transform, download=True)
 
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=False, num_workers=0,
@@ -37,6 +41,10 @@ def cifar10_loader(data_path='../data', batch_size=128, maxsize=-1):
                                               pin_memory=True)
     train_loader_original = torch.utils.data.DataLoader(train_data_original, batch_size=batch_size,
                                                         shuffle=False, num_workers=0, pin_memory=True)
+    if  split_train_val:
+      valid_loader_original = torch.utils.data.DataLoader(train_data_original, batch_size=batch_size,
+                                            shuffle=False, num_workers=0, pin_memory=True)   
+      return train_loader, test_loader, train_loader_original, valid_loader_original                                                                                       
 
     return train_loader, test_loader, train_loader_original
 
