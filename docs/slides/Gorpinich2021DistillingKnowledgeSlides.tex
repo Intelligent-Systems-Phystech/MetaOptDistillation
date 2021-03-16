@@ -1,0 +1,133 @@
+\documentclass[8pt, aspectratio=169]{beamer}
+\beamertemplatenavigationsymbolsempty
+\usecolortheme{beaver}
+\setbeamertemplate{blocks}[rounded=true, shadow=true]
+\setbeamertemplate{footline}[page number]
+\input{math_symbols_presentation}
+%
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{amssymb,amsfonts,amsmath,mathtext}
+\usepackage{subfig}
+\usepackage[all]{xy} % xy package for diagrams
+\usepackage{array}
+\usepackage{multicol}% many columns in slide
+\usepackage{hyperref}% urls
+\usepackage{hhline}%tables
+% Your figures are here:
+%\graphicspath{ {fig/} {../fig/} }
+
+%----------------------------------------------------------------------------------------------------------
+\title[\hbox to 56mm{Оптимизация параметров модели на основе дистилляции знаний}]{Регуляризация траектории оптимизации \\ параметров модели глубокого обучения \\ на основе дистилляции знаний}
+\author[М. Горипинич]{Мария Горпинич}
+\institute{Московский физико-технический институт}
+\date{\footnotesize
+\par\smallskip\emph{Курс:} Автоматизация научных исследований\par (практика, В.\,В.~Стрижов)/Группа 874
+\par\smallskip\emph{Эксперт:} В.\,В.~Стрижов
+\par\smallskip\emph{Консультант:} О.\,Ю.~Бахтеев
+\par\bigskip\small 2021}
+%----------------------------------------------------------------------------------------------------------
+\begin{document}
+%----------------------------------------------------------------------------------------------------------
+% \begin{frame}
+% \thispagestyle{empty}
+% \maketitle
+% \end{frame}
+%-----------------------------------------------------------------------------------------------------
+% \begin{frame}{Цель исследования}
+% %\begin{block}{Решается задача}
+% %\end{block}
+% \end{frame}
+%-----------------------------------------------------------------------------------------------------
+\begin{frame}{Оптимизация параметров модели на основе дистилляции знаний}
+
+Рассматривается задача дистилляции модели. Будем корректировать траекторию оптимизации на основе двухуровневой задачи оптимизации:
+
+$$ \hat{\bh} = \argmax\limits_{\bh \in \bbR^2} \sum\limits_{(\bx, y) \in \fD_\text{val}}\sum\limits_{k=1}^{K}y^k\log \bg(\bx, \bw)|_{T=1} $$
+$$ \hat{\bw} = \argmax\limits_{\bw \in \bbR^s} (1-\beta)\sum\limits_{(\bx, y) \in \fD_\text{train}}\sum\limits_{k=1}^{K}y^k\log \bg(\bx, \bw)|_{T=1} + \beta\sum\limits_{(\bx, y) \in \fD_\text{train}}\sum\limits_{k=1}^{K}\bff(\bx)|_{T=T_0}\log \bg(\bx, \bw)|_{T=T_0} $$
+
+где $\bh = [\beta, T_0]$ --- параметры дистилляционного слагаемого.
+
+% \begin{columns}[c]
+% \column{0.5\textwidth}
+% Рассматривается задача дистилляции модели. Будем корректировать траекторию оптимизации на основе двухуровневой задачи оптимизации:
+
+% $$ \hat{\bh} = \argmax\limits_{\bh \in \bbR^2} \cL_\text{val}(\hat{\bw}, \bh) $$
+% $$ \hat{\bw} = \argmin\limits_{\bw \in \bbR^s} \cL_\text{train}(\bw, \bh) $$
+
+% где $\bh$ --- параметры дистилляционного слагаемого.
+% \column{0.5\textwidth}
+% $$\cL_\text{train}(\bw, \bh) = -\sum\limits_{(\bx, y) \in \fD_\text{train}}\sum\limits_{k=1}^{K}y^k\log \bg(\bx, \bw)|_{T=1} $$$$- \beta\sum\limits_{(\bx, y) \in \fD_\text{train}}\sum\limits_{k=1}^{K}\bff(\bx)|_{T=T_0}\log \bg(\bx, \bw)|_{T=T_0}$$
+
+% $$\cL_\text{val}(\bw, \bh) = \sum\limits_{(\bx, y) \in \fD_\text{val}}\sum\limits_{k=1}^{K}y^k\log \bg(\bx, \bw)|_{T=1}$$
+% \end{columns}
+
+% Оптимизация гиперпараметров:
+
+% $$\bh^\prime = \bh - \gamma_{\bh}\nabla_{\bh}\cL_\text{val}(\bw - \gamma\nabla\cL_\text{train}(\bw, \bh), \bh)$$
+
+\begin{columns}[c]
+\column{0.5\textwidth}
+\includegraphics[width=0.9\textwidth]{acc.pdf}
+\column{0.5\textwidth}
+\includegraphics[width=0.9\textwidth]{beta_temp_old.jpg}
+\end{columns}
+
+% \bigskip
+% Важное {\color{red}сообщение}.
+\end{frame}
+
+
+%----------------------------------------------------------------------------------------------------------
+% \begin{frame}{Постановка задачи}
+
+% \end{frame}
+%----------------------------------------------------------------------------------------------------------
+% \begin{frame}{Решение}
+% \begin{columns}[c]
+% \column{0.6\textwidth}
+%     Столбец 1
+% \column{0.4\textwidth}
+%     Столбец 2
+% \end{columns}
+% \end{frame}
+%----------------------------------------------------------------------------------------------------------
+% \begin{frame}{Вычислительный эксперимент}
+
+%  Что зритель видит на графике.
+
+% \includegraphics[width=0.8\textwidth]{ErrorFunction}
+
+% О чем говорит этот график.
+
+% \end{frame}
+%----------------------------------------------------------------------------------------------------------
+% \begin{frame}{Заключение}
+%     \begin{block}{Перечислите ваши результаты}
+%     \begin{itemize}
+%         \item предложен метод,
+%         \item доказана теорема.
+%     \end{itemize}
+%     \end{block}
+% \end{frame}
+%----------------------------------------------------------------------------------------------------------
+% \end{document} 
+% \end{frame}
+%-----------------------------------------------------------------------------------------------------
+
+
+% \end{frame}
+%----------------------------------------------------------------------------------------------------------
+% \begin{frame}{���������� ������}
+% \end{frame}
+%----------------------------------------------------------------------------------------------------------
+% \begin{frame}{�������}
+% \end{frame}
+%----------------------------------------------------------------------------------------------------------
+% \begin{frame}{�������������� �����������}
+% \end{frame}
+%----------------------------------------------------------------------------------------------------------
+% \begin{frame}{����������}
+% \end{frame}
+%----------------------------------------------------------------------------------------------------------
+\end{document} 
