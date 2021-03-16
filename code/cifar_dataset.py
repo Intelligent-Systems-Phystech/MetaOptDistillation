@@ -42,7 +42,7 @@ def cifar10_loader(data_path='../data', batch_size=128, split_train_val=False, m
     train_loader_original = torch.utils.data.DataLoader(train_data_original, batch_size=batch_size,
                                                         shuffle=False, num_workers=0, pin_memory=True)
     if  split_train_val:
-      valid_loader_original = torch.utils.data.DataLoader(train_data_original, batch_size=batch_size,
+      valid_loader_original = torch.utils.data.DataLoader(valid_data_original, batch_size=batch_size,
                                             shuffle=False, num_workers=0, pin_memory=True)   
       return train_loader, test_loader, train_loader_original, valid_loader_original                                                                                       
 
