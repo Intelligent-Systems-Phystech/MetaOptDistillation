@@ -95,7 +95,8 @@ class AdamHyperGradCalculator():
                              optimizer.param_groups[0]['betas'][1],
                              optimizer.param_groups[0]['lr'],
                              optimizer.param_groups[0]['eps']))
-      
+            
+            
     def calc_gradients(self, trn, val):
         """ Compute unrolled loss and backward its gradients
         Args:
@@ -122,7 +123,7 @@ class AdamHyperGradCalculator():
         # update final gradient = dalpha - xi*hessian
         with torch.no_grad():
             for alpha,  he in zip(h,  hessian):
-                alpha.grad =  lr*he
+                alpha.grad =  -lr*he
 
     def compute_hessian(self, dw, trn):
         """
@@ -157,3 +158,5 @@ class AdamHyperGradCalculator():
 
         hessian = [(p-n) / 2.*eps for p, n in zip(dalpha_pos, dalpha_neg)]
         return hessian
+        
+        
