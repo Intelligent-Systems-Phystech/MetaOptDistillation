@@ -1,9 +1,9 @@
-\documentclass[8pt, aspectratio=169]{beamer}
+\documentclass[10pt, aspectratio=169]{beamer}
 \beamertemplatenavigationsymbolsempty
 \usecolortheme{beaver}
 \setbeamertemplate{blocks}[rounded=true, shadow=true]
 \setbeamertemplate{footline}[page number]
-\input{math_symbols_presentation}
+\input{slides/math_symbols_slides}
 %
 \usepackage[utf8]{inputenc}
 \usepackage[english,russian]{babel}
@@ -14,13 +14,20 @@
 \usepackage{multicol}% many columns in slide
 \usepackage{hyperref}% urls
 \usepackage{hhline}%tables
+\usepackage[style=numeric,sorting=none]{biblatex}
 % Your figures are here:
 %\graphicspath{ {fig/} {../fig/} }
 
 %----------------------------------------------------------------------------------------------------------
-\title[\hbox to 56mm{Оптимизация параметров модели на основе дистилляции знаний}]{Регуляризация траектории оптимизации \\ параметров модели глубокого обучения \\ на основе дистилляции знаний}
+\addbibresource{slides_bibliography.bib}
+\nocite{*}
+\title[\hbox to 56mm{Оптимизация параметров модели на основе дистилляции знаний}]{Регуляризация траектории оптимизации 
+параметров модели глубокого обучения на основе дистилляции знаний}
 \author[М. Горипинич]{Мария Горпинич}
-\institute{Московский физико-технический институт}
+% \begingroup
+% \fontsize{8pt}{10pt}\selectfont
+\institute{\fontsize{11}{14}\selectfontМосковский физико-технический институт}
+% \endgroup
 \date{\footnotesize
 \par\smallskip\emph{Курс:} Автоматизация научных исследований\par (практика, В.\,В.~Стрижов)/Группа 874
 \par\smallskip\emph{Эксперт:} В.\,В.~Стрижов
@@ -29,24 +36,31 @@
 %----------------------------------------------------------------------------------------------------------
 \begin{document}
 %----------------------------------------------------------------------------------------------------------
-% \begin{frame}
-% \thispagestyle{empty}
-% \maketitle
-% \end{frame}
+\begin{frame}
+\thispagestyle{empty}
+\maketitle
+\end{frame}
 %-----------------------------------------------------------------------------------------------------
-% \begin{frame}{Цель исследования}
-% %\begin{block}{Решается задача}
-% %\end{block}
-% \end{frame}
+\begin{frame}{Задача дистилляции знаний}
+\begin{block}{Цель}
+    Предложить метод назначения метапараметров в  задаче обучения с применением дистилляции знаний.
+\end{block}
+\begin{block}{Исследуемая проблема}
+    Назначение метапараметров задачи дистилляции является плохо исследуемой задачей.
+\end{block}
+\begin{block}{Метод решения}
+    Предлагается рассмотреть задачу как двухуровневую задачу оптимизации. Решение задачи оптимизации метапараметров производится градиентными методами. Для ускорения вычислительно затратной процедуры оптимизации метапараметров производится прогнозирование локально-линейными моделями.
+\end{block}
+\end{frame}
 %-----------------------------------------------------------------------------------------------------
 \begin{frame}{Оптимизация параметров модели на основе дистилляции знаний}
 
-Рассматривается задача дистилляции модели. Будем корректировать траекторию оптимизации на основе двухуровневой задачи оптимизации:
+% Рассматривается задача дистилляции модели. Будем корректировать траекторию оптимизации на основе двухуровневой задачи оптимизации:
 
-$$ \hat{\bh} = \argmax\limits_{\bh \in \bbR^2} \sum\limits_{(\bx, y) \in \fD_\text{val}}\sum\limits_{k=1}^{K}y^k\log \bg(\bx, \bw)|_{T=1} $$
-$$ \hat{\bw} = \argmax\limits_{\bw \in \bbR^s} (1-\beta)\sum\limits_{(\bx, y) \in \fD_\text{train}}\sum\limits_{k=1}^{K}y^k\log \bg(\bx, \bw)|_{T=1} + \beta\sum\limits_{(\bx, y) \in \fD_\text{train}}\sum\limits_{k=1}^{K}\bff(\bx)|_{T=T_0}\log \bg(\bx, \bw)|_{T=T_0} $$
+% $$ \hat{\bh} = \argmax\limits_{\bh \in \bbR^2} \sum\limits_{(\bx, y) \in \fD_\text{val}}\sum\limits_{k=1}^{K}y^k\log \bg(\bx, \bw)|_{T=1} $$
+% $$ \hat{\bw} = \argmax\limits_{\bw \in \bbR^s} (1-\beta)\sum\limits_{(\bx, y) \in \fD_\text{train}}\sum\limits_{k=1}^{K}y^k\log \bg(\bx, \bw)|_{T=1} + \beta\sum\limits_{(\bx, y) \in \fD_\text{train}}\sum\limits_{k=1}^{K}\bff(\bx)|_{T=T_0}\log \bg(\bx, \bw)|_{T=T_0} $$
 
-где $\bh = [\beta, T_0]$ --- параметры дистилляционного слагаемого.
+% где $\bh = [\beta, T_0]$ --- параметры дистилляционного слагаемого.
 
 % \begin{columns}[c]
 % \column{0.5\textwidth}
@@ -66,50 +80,128 @@ $$ \hat{\bw} = \argmax\limits_{\bw \in \bbR^s} (1-\beta)\sum\limits_{(\bx, y) \i
 
 % $$\bh^\prime = \bh - \gamma_{\bh}\nabla_{\bh}\cL_\text{val}(\bw - \gamma\nabla\cL_\text{train}(\bw, \bh), \bh)$$
 
-\begin{columns}[c]
-\column{0.5\textwidth}
-\includegraphics[width=0.9\textwidth]{acc.pdf}
-\column{0.5\textwidth}
-\includegraphics[width=0.9\textwidth]{beta_temp_old.jpg}
-\end{columns}
+Назовем {\color{red}дистилляцией знаний} задачу оптимизации параметров модели прогнозирования, при которой учитывается не только информация, содержащаяся в выборке, но также и информация, содержащаяся в сторонней модели (модели-учителе).
 
+\centering
+\includegraphics[width=0.6\textwidth]{scatter_temp_beta.pdf}
 % \bigskip
 % Важное {\color{red}сообщение}.
 \end{frame}
 
 
+\begin{frame}{Основная литература}
+    % \bibliographystyle{slides_bibstyle.bst}
+    % \bibliography{slides_bibliography.bib}
+    \printbibliography
+\end{frame}
+
 %----------------------------------------------------------------------------------------------------------
-% \begin{frame}{Постановка задачи}
+\begin{frame}{Постановка задачи}
+\begin{block}{Задана выборка}
+    $$\fD = \{(\bx_i, y_i)\}_{i=1}^{m},\; \bx_i \in \bbR^n,\; y_i \in \bbY = \{1, \dots, K\},\qquad \fD = \fD_\text{train} \sqcup \fD_\text{val}$$
+\end{block}
+\begin{block}{Дистилляция}
+    $$\cL_\text{train}(\bw, \boldsymbol{\lambda}) = -\beta_1\sum\limits_{(\bx, y) \in \fD_\text{train}}\underbrace{\sum\limits_{k=1}^{K}y^k\log \bg(\bx, \bw)|_{T=1}}_{\text{исходная функция потерь}} - \beta_2\sum\limits_{(\bx, y) \in \fD_\text{train}}\underbrace{\sum\limits_{k=1}^{K}\bff(\bx)|_{T=T_0}\log \bg(\bx, \bw)|_{T=T_0}}_{\text{слагаемое дистилляции}}$$
+    где $\bff$ --- модель учителя, $\bg$ --- модели ученика, $\boldsymbol{\lambda} = [\beta_1, \beta_2, T]$ ---  множество метапараметров.
+\end{block}
+\end{frame}
 
-% \end{frame}
+\begin{frame}{Постановка задачи}
+Итоговая оптимизационная задача:
+$$\hat{\boldsymbol{\lambda}} = \argmax\limits_{\boldsymbol{\lambda} \in \bbR^2} \cL_\text{val}(\hat{\bw}, \boldsymbol{\lambda})$$
+$$\hat{\bw} = \argmin\limits_{\bw \in \bbR^s} \cL_\text{train}(\bw, \boldsymbol{\lambda})$$
+\end{frame}
+
+\begin{frame}{Градиентные методы оптимизации}
+Оптимизационную задачу решает оператор градиентного спуска:
+
+$$U(\bw, \boldsymbol{\lambda}) = \bw - \gamma\nabla\cL_\text{train}(\bw, \boldsymbol{\lambda}).$$
+
+Будем обновлять метапраметры последовательно согласно следующему правилу:
+
+$$\boldsymbol{\lambda}^\prime = \boldsymbol{\lambda} - \gamma_{\boldsymbol{\lambda}}\nabla_{\boldsymbol{\lambda}}\cL_\text{val}(U(\bw, \boldsymbol{\lambda}), \boldsymbol{\lambda}) = \boldsymbol{\lambda} - \gamma_{\boldsymbol{\lambda}}\nabla_{\boldsymbol{\lambda}}\cL_\text{val}(\bw - \gamma\nabla\cL_\text{train}(\bw, \boldsymbol{\lambda}), \boldsymbol{\lambda}).$$
+
+{\color{red}Гипотеза}: траекторию градиентной оптимизации можно аппроксимировать локально-линейной моделью
+
+\end{frame}
 %----------------------------------------------------------------------------------------------------------
-% \begin{frame}{Решение}
-% \begin{columns}[c]
-% \column{0.6\textwidth}
-%     Столбец 1
-% \column{0.4\textwidth}
-%     Столбец 2
-% \end{columns}
-% \end{frame}
+
 %----------------------------------------------------------------------------------------------------------
-% \begin{frame}{Вычислительный эксперимент}
+\begin{frame}{Вычислительный эксперимент}
+\begin{block}{Цель эксперимента}
+Анализ градиентной оптимизации и проверка гипотезы об аппроксимации траектории оптимизации локально-линейной моделью.
+\end{block}
+\begin{block}{Выборка}
+$$\fD = \{(\bx_i, y_i)\}_{i=1}^{m},\; x_{ij} \in \cN(0, 1),\; j=1, 2, x_{i3} = [\text{sign}(x_{i1})+\text{sign}(x_{i2})>0]$$
+$$y_i = \text{sign}(x_{i1}*x_{i2}+\delta) \in \bbY$$
+Размер выборки модели-ученика намного меньше размера выборки модели-учителя.
+\end{block}
+\begin{figure}
+    \fontsize{5}{5}\selectfont
+    \begin{minipage}[h]{0.3\linewidth}
+    \center{
+    \includegraphics[width=\linewidth]{ttrain.pdf}\\а)}
+    \end{minipage}
+    \begin{minipage}[h]{0.3\linewidth}
+    \center{
+    \includegraphics[width=\linewidth]{train.pdf}\\б)}
+    \end{minipage}
+    \begin{minipage}[h]{0.3\linewidth}
+    \center{
+    \includegraphics[width=\linewidth]{test.pdf}\\в)}
+    \end{minipage}
+    \vspace{-0.2 cm}
+    \caption*{\fontsize{8}{5}\selectfont
+    Визуализация выборки а) учителя; б) ученика; в) тестовой}
+\end{figure}
+\end{frame}
 
-%  Что зритель видит на графике.
+\begin{frame}{Вычислительный эксперимент}
+\begin{figure}
+    \includegraphics[width=0.6\textwidth]{linear_train_splines_every_epoch.pdf}
+    \caption*{График зависимости точности классификации от номера итерации при различном количестве перезапусков}
+\end{figure}
+\end{frame}
 
-% \includegraphics[width=0.8\textwidth]{ErrorFunction}
+\begin{frame}{Вычислительный эксперимент}
+\fontsize{6}{5}\selectfont
+\begin{figure}
+    \caption*{\fontsize{8}{5}\selectfont
+    Графики зависимости значений метапараметров от номера итерации: а) $\beta_1$; б) $\beta_2$; в) температуры}
+    \vspace{-0.3 cm}
+    \begin{minipage}[h]{0.325\linewidth}
+    \center{
+    \includegraphics[width=\linewidth]{beta1_iter.pdf}\\а)}
+    \end{minipage}
+    \begin{minipage}[h]{0.325\linewidth}
+    \center{
+    \includegraphics[width=\linewidth]{beta2_iter.pdf}\\б)}
+    \end{minipage}
+    \vspace{-0.2 cm}
+    \begin{minipage}[h]{0.325\linewidth}
+    \center{
+    \includegraphics[width=\linewidth]{temp_iter.pdf}\\в)}
+    \end{minipage}
+    
+\end{figure}
+\end{frame}
 
-% О чем говорит этот график.
-
-% \end{frame}
+\begin{frame}{Вычислительный эксперимент}
+\begin{figure}
+    \includegraphics[width=0.6\textwidth]{acc_iter.pdf}
+    \caption*{График зависимости точности классификации от номера итерации}
+\end{figure}
+\end{frame}
 %----------------------------------------------------------------------------------------------------------
-% \begin{frame}{Заключение}
-%     \begin{block}{Перечислите ваши результаты}
-%     \begin{itemize}
-%         \item предложен метод,
-%         \item доказана теорема.
-%     \end{itemize}
-%     \end{block}
-% \end{frame}
+\begin{frame}{Заключение}
+    \begin{itemize}
+        \item исследовано применение градиентных методов оптимизации для метапараметров задачи дистилляции
+        \item предложена и проверена гипотеза по аппроксимации траектории оптимизации метапараметров 
+        \item вычислительный эксперимент показал, что оптимизация метапараметров применима к задаче дистилляции; 
+        \item подтверждена возможность аппроксимации метапараметров локально-линейными моделями
+        \item планируется дальнейшее исследование оптимизационной задачи и анализ качества  аппроксимации траектории оптимизации метапараметров более сложными прогностическими моделями.
+    \end{itemize}
+\end{frame}
 %----------------------------------------------------------------------------------------------------------
 % \end{document} 
 % \end{frame}
