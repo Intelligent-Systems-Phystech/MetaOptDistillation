@@ -123,25 +123,25 @@
 \[\boldsymbol{\lambda} = [\lambda_1, \lambda_2, T].\]
 
 \textbf{Утверждение 1.}
-Функция потерь при~$\lambda_1 = 0$ является KL-дистилляцией модели.
+При~$\lambda_1 = 0$ происходит минимизация функции потерь, которая является $D$-дистилляцией модели c $D = D_{KL}(\sigma(\bff/T|_{T=T_0})_i, \sigma(\bg/T|_{T=T_0})_i)$.
 
 \textit{Доказательство}
 При~$\lambda_1 = 0$:
-$$\cL_\text{train} = \sum\limits_{(\bx, y) \in \fD_\text{train}}\sum\limits_{k=1}^{K}\bff(\bx)|_{T=T_0}\log \bg(\bx, \bw)|_{T=T_0} = D_{KL}(\bff(\bx), \bg(\bx, \bw))$$
+$$\cL_\text{train}(\bw, \boldsymbol{\lambda}) = \sum\limits_{(\bx, y) \in \fD_\text{train}}\sum\limits_{k=1}^{K}\frac{e^{\bff(\bx)_i/T}}{\sum\limits_{j}e^{\bff(\bx)_j/T}}|_{T=T_0}\log \frac{e^{\bg(\bx, \bw)_i/T}}{\sum\limits_{j}e^{\bg(\bx, \bw)_j/T}}|_{T=T_0}.$$
 
 По определению $D$-дистилляции получим, что должно выполняться условие:
 
-$$\lim_{t \to \infty} D_{KL}(\bff(\bx), \bg(\bx, \bw_t))=\min_{\bw^\prime_t \in \bbR^s} D_{KL}(\bff(\bx), \bg(\bx, \bw^\prime_t))$$
+$$\lim_{t \to \infty} D_{KL}(\sigma(\bff(\bx)/T|_{T=T_0})_i, \sigma(\bg(\bx, \bw_t)/T|_{T=T_0})_i)=\min_{\bw^\prime_t \in \bbR^s} D_{KL}(\sigma(\bff(\bx)/T|_{T=T_0})_i, \sigma(\bg(\bx, \bw^\prime_t)/T|_{T=T_0})_i)$$
 
-Так как для оптимизации используется градиентный спуск, то
+Используем следующее неравенство:
 
-$$D_{KL}(\bff(\bx), \bg(\bx, \bw^\prime_{i+1})) \le D_{KL}(\bff(\bx), \bg(\bx, \bw^\prime_i))$$
+$$D_{KL}(\sigma(\bff(\bx)/T|_{T=T_0})_i, \sigma(\bg(\bx, \bw^\prime_{k+1}))) \le D_{KL}(\sigma(\bff(\bx)/T|_{T=T_0})_i, \sigma(\bg(\bx, \bw^\prime_k)/T|_{T=T_0})_i)$$
 
-Также выполняется $D_{KL}(\bff(\bx), \bg(\bx, \bw)) \ge 0$
+Также выполняется $D_{KL}(\sigma(\bff(\bx)/T|_{T=T_0})_i, \sigma(\bg(\bx, \bw)_T|_{T=T_0})_i) \ge 0.$
 
 Тогда получаем, что
 
-$$\lim_{t \to \infty} D_{KL}(\bff(\bx), \bg(\bx, \bw_t))=\min_{\bw^\prime_t \in \bbR^s} D_{KL}(\bff(\bx), \bg(\bx, \bw^\prime_t))$$
+$$\lim_{t \to \infty} D_{KL}(\sigma(\bff(\bx)/T|_{T=T_0})_i, \sigma(\bg(\bx, \bw_t)/T|_{T=T_0})_i)=\min_{\bw^\prime_t \in \bbR^s} D_{KL}(\sigma(\bff(\bx)/T|_{T=T_0})_i, \sigma(\bg(\bx, \bw^\prime_t)_T|_{T=T_0})_i)$$
 
 \begin{equation*}
     \hspace{16.3 cm}\Box
@@ -214,14 +214,14 @@ $$\lim_{t \to \infty} D_{KL}(\bff(\bx), \bg(\bx, \bw_t))=\min_{\bw^\prime_t \in 
     \boldsymbol{\lambda}^\prime = \boldsymbol{\lambda} - \gamma_{\boldsymbol{\lambda}}\nabla_{\boldsymbol{\lambda}}\cL_\text{val}(U(\bw, \boldsymbol{\lambda}), \boldsymbol{\lambda}) = \boldsymbol{\lambda} - \gamma_{\boldsymbol{\lambda}}\nabla_{\boldsymbol{\lambda}}\cL_\text{val}(\bw - \gamma\nabla\cL_\text{train}(\bw, \boldsymbol{\lambda}), \boldsymbol{\lambda}).
 \end{equation}
 
-Градиентная оптимизация является вычислительно затратной, поэтому предлагается аппроксимировать траекторию оптимизации модели. Предлагается предсказывать траекторию изменения метапараметров модели (а конкретно, их градиенты) с помощью линейных моделей через определенное число итераций:
+Градиентная оптимизация является вычислительно затратной, поэтому предлагается аппроксимировать траекторию оптимизации модели. Предлагается предсказывать траекторию изменения метапараметров модели с помощью линейных моделей через определенное число итераций:
 
 \begin{equation}
     \boldsymbol{\lambda}^\prime =  \boldsymbol{\lambda} + \bc^{\T}\begin{pmatrix}z\\1\end{pmatrix}
 \end{equation}
 
 \noindent
-где $\sigma$ --- сигмоида, $z$ --- номер итерации по модулю периодичности обучения линейной модели, $\bc$ --- коэффициенты линейного многочлена. В остальное время используются градиентные методы.
+где $\sigma$ --- сигмоида, $z$ --- номер итерации по модулю периодичности обучения линейной модели, $\bc$ --- коэффициенты линейного многочлена, которые находятся при помощи МНК. В остальное время используются градиентные методы.
 
 \section{Вычислительный эксперимент}
 
@@ -234,7 +234,7 @@ $$\fD = \{(\bx_i, y_i)\}_{i=1}^{m},\; x_{ij} \in \cN(0, 1),\; j=1, 2, x_{i3} = [
 $$y_i = \text{sign}(x_{i1}\cdot x_{i2}+\delta) \in \bbY,$$
 
 \noindent
-где~$\delta$ --- это шум. При этом размер выборки модели-ученика намного меньше размера выборки модели-учителя.
+где~$\delta \in N(0, 0.5)$ --- это шум. При этом размер выборки модели-ученика намного меньше размера выборки модели-учителя и тестовая выборка совпадает с валидационной.
 
 % \begin{figure}[!ht]
 %     \centering
@@ -337,7 +337,7 @@ $$y_i = \text{sign}(x_{i1}\cdot x_{i2}+\delta) \in \bbY,$$
 \subsection{Эксперимент на выборке CIFAR-10}
 В эксперименте используется выборка CIFAR-10, которая состоит из~$60000$ цветных изображений размера~$32 \times 32$ пикселя, разделенных на 10 непересекающихся классов. К каждому классу относится~$6000$ изображений. Выборка делится на обучающую ($50000$ изображений) и тестовую ($10000$ изображений) подвыборки. В тестовой выборке содержится~$1000$ изображений каждого класса.
 
-Внешним критерием качества модели является точность~$\eqref{eq:accuracy}$. В качестве моделей-учителей рассматриваются модели из~\cite{conf/cvpr/PassalisTT20}, а именно, ResNet-18 и сверточная нейросеть с тремя сверточными слоями и двумя слоями полносвязной нейросети.
+Внешним критерием качества модели является точность~$\eqref{eq:accuracy}$. В качестве модели-учителя рассматривается модель из~\cite{conf/cvpr/PassalisTT20}, а именно, сверточная нейросеть с тремя сверточными слоями и двумя слоями полносвязной нейросети.
 
 Проведено сравнение среднего качества обучения модели-ученика без дистилляции после~$5$ запусков, с дистилляцией с моделью-учителем ResNet и сверточной нейросетью после 20 запусков. Значение коэффициента~$\lambda_1$ лежит в пределах от 0 до 1, значение температуры~---~от 0.1 до 10.
 
@@ -371,14 +371,14 @@ $$y_i = \text{sign}(x_{i1}\cdot x_{i2}+\delta) \in \bbY,$$
 \begin{figure}[!ht]
 % \center{
 \begin{minipage}[h]{0.5\linewidth}
-\center{\includegraphics[width=\linewidth]{beta1_iter3.pdf}\\а)}
+\center{\includegraphics[width=\linewidth]{beta1_iter19.pdf}\\а)}
 \end{minipage}
 \begin{minipage}[h]{0.5\linewidth}
-\center{\includegraphics[width=\linewidth]{beta2_iter3.pdf}\\б)}
+\center{\includegraphics[width=\linewidth]{beta2_iter19.pdf}\\б)}
 \end{minipage}
 \center{
 \begin{minipage}[h]{0.5\linewidth}
-\center{\includegraphics[width=\linewidth]{temp_iter3.pdf}\\в)}
+\center{\includegraphics[width=\linewidth]{temp_iter19.pdf}\\в)}
 \end{minipage}}
 \caption{График зависимости а)~$\lambda_1$; б)~$\lambda_2$; в) температуры от номера итерации}
 \label{fig:meta_iter_cifar}
@@ -388,12 +388,29 @@ $$y_i = \text{sign}(x_{i1}\cdot x_{i2}+\delta) \in \bbY,$$
 
 \begin{figure}[!ht]
 \centering
-\includegraphics[width=0.5\textwidth]{acc_18.pdf}
+\includegraphics[width=0.5\textwidth]{acc_19.pdf}
 \caption{График зависимости точности от числа эпох}
 \label{fig:acc_epoch}
 \end{figure}
 
 На~рис. \ref{fig:acc_epoch} изображена зависимость точности от числа эпох для обучения модели-ученика без дистилляции, обучения с дистилляцией и случайными метапараметрами, обучения с дистилляцией и оптимизацией метапараметров, а также обучения с дистилляцией и оптимальными метапараметрами, полученными в ходе их оптимизации. Можно заметить, что точность обучения с дистилляцией гораздо выше, чем без дистилляции. Также наибольшая точность достигается при обучении с дистилляцией и прогнозированными метапараметрами.
+
+\begin{table}[!ht]
+    \centering
+    \begin{tabular}{|c||p{2.5 cm}|p{5 cm}|}
+    \hline
+    Эксперимент & Точность без \linebreak дистилляции & Точность с предсказанием \linebreak метапараметров\\
+    \hline
+    Base  & 0.5465 & -- \\
+    Synthetic & 0.76 & 0.83 \\
+    CIFAR-10 & 0.5465 & 0.5961 \\
+    \hline
+    \end{tabular}
+    \caption{Результаты эксперимента}
+    \label{tab:res}
+\end{table}
+
+На основании полученных результатов можно сделать вывод о применимости данного метода. Наблюдается выигрыш в точности предсказаний модели при использовании предложенного метода. Также метод является менее вычислительно затратным по сравнению с использованием только градиентной оптимизации.
 
 % \begin{table}[h]
 % \centering
