@@ -1,0 +1,261 @@
+import torch as t 
+from cifar_very_tiny import *
+import numpy as np
+from numpy import polyfit
+from numpy import polyval
+import tqdm
+import matplotlib.pylab as plt
+import matplotlib.cm as cm
+import json
+import hyperparams
+from importlib import reload
+from scipy.interpolate import interp1d
+import matplotlib.pylab as plt
+import matplotlib.cm as cm
+
+device = 'cuda' if t.cuda.is_available() else 'cpu'
+
+def accuracy(student, t_load):
+    student.eval()
+    total = 0 
+    correct = 0
+    with t.no_grad():
+        for x,y in t_load:
+            x = x.to(device)
+            y = y.to(device)
+            out = student(x)
+            correct += t.eq(t.argmax(out, 1), y).sum()
+            total+=len(x)
+    student.train()
+    return (correct/total).cpu().detach().numpy()
+
+
+kl = nn.KLDivLoss(reduction='batchmean')
+sm = nn.Softmax(dim=1)
+
+def distill(out, batch_logits, temp):
+    g = sm(out/temp)
+    f = F.log_softmax(batch_logits/temp)    
+    return kl(f, g)
+
+
+crit = nn.CrossEntropyLoss()
+
+# определяем функцию потерь как замкнутую относительно аргументов функцию
+# нужно для подсчета градиентов гиперпараметров по двухуровневой оптимизации
+def param_loss(batch,model,h):
+    x,y,batch_logits = batch    
+    lambda1,lambda2,temp = h
+    out = model(x)
+    lambda1 = F.sigmoid(lambda1)
+    lambda2 = F.sigmoid(lambda2)
+    temp = F.sigmoid(temp) * 9.9+0.1
+    distillation_loss = distill(out, batch_logits, temp)
+    student_loss = crit(out, y)                
+    loss = lambda1 * distillation_loss + lambda2 * student_loss
+    return loss
+
+
+# определяем функцию валидационную функцию потерь как замкнутую относительно аргументов функцию
+# нужно для подсчета градиентов гиперпараметров по двухуровневой оптимизации
+def hyperparam_loss(batch, model):
+    x,y = batch
+    out = model(x)
+    student_loss = crit(out, y)            
+    return student_loss
+
+
+# mode = {'nodistil', 'distil', 'random'}
+def cifar_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filename, tr_load, t_load, validate_every_epoch, mode='nodistil'):
+    if mode != 'nodistil':
+        logits = np.load('../code/logits_cnn.npy')
+        
+    for _ in range(run_num):
+        internal_results = []
+        
+        if mode == 'distil':
+            lambda1 = start_lambda1
+            temp = start_temp
+            
+        elif mode == 'random':
+            lambda1 = t.nn.Parameter(t.tensor(np.random.uniform(low=-1, high=1), device=device), requires_grad=True)
+            lambda2 = t.nn.Parameter(t.tensor(np.random.uniform(low=-1, high=1), device=device), requires_grad=True)
+            temp = t.nn.Parameter(t.tensor(np.random.uniform(low=-2, high=0), device=device), requires_grad=True)
+            h = [lambda1, lambda2, temp]
+            
+        student = Cifar_Very_Tiny(10).to(device)
+        optim = t.optim.Adam(student.parameters())    
+        
+        for e in range(epoch_num):
+            tq = tqdm.tqdm(tr_load)
+            losses = []
+            
+            for batch_id, (x,y) in enumerate(tq):
+                x = x.to(device)
+                y = y.to(device)
+                
+                if mode == 'distil' or mode == 'random':
+                    batch_logits = t.Tensor(logits[128*batch_id:128*(batch_id+1)]).to(device)
+                
+                if mode == 'nodistil' or mode == 'distil':
+                    student.zero_grad()           
+                    out = student(x)
+                    student_loss = crit(out, y)
+                
+                if mode == 'distil':
+                    distillation_loss = distill(out, batch_logits, temp)
+                    loss = (1-lambda1) * student_loss + lambda1*distillation_loss
+                    
+                elif mode == 'nodistil':
+                    loss = student_loss
+                    
+                elif mode == 'random':
+                    optim.zero_grad()
+                    loss = param_loss((x,y,batch_logits), student,h)
+                    
+                losses.append(loss.cpu().detach().numpy())
+                loss.backward()
+                optim.step()
+                tq.set_description('current loss:{}'.format(np.mean(losses[-10:])))        
+                
+            if e==0 or (e+1)%validate_every_epoch == 0: # если номер эпохи делится на 5 или эпоха - первая             
+                test_loss = []
+                student.eval()
+                
+                for x,y in t_load:
+                    x = x.to(device)
+                    y = y.to(device)                            
+                    test_loss.append(crit(student(x), y).detach().cpu().numpy())                 
+                    
+                test_loss = float(np.mean(test_loss))
+                acc = float(accuracy(student, t_load))
+                student.train()
+                
+                if mode == 'nodistil' or mode == 'distil':
+                    internal_results.append({'epoch': e, 'test loss':test_loss, 'accuracy':acc})
+                    
+                elif mode == 'random':
+                    internal_results.append({'epoch': e, 'test loss':test_loss, 'accuracy':acc,
+                                     'temp':float(10*F.sigmoid(h[2]).cpu().detach().numpy()),
+                                     'lambda1':float(F.sigmoid(h[0]).cpu().detach().numpy()),
+                                     'lambda2':float(F.sigmoid(h[1]).cpu().detach().numpy())})
+
+                print (internal_results[-1])
+
+        with open('../log/exp'+exp_ver+'_'+filename+'.jsonl', 'a') as out:
+            out.write(json.dumps({'results':internal_results, 'version': exp_ver})+'\n')
+            
+# mode = {'opt', 'splines'}
+def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, mode='opt'):
+    hist = []
+    logits = np.load('../code/logits_cnn.npy')
+    for _ in range(run_num):
+        internal_results = []
+
+        lambda1 = t.nn.Parameter(t.tensor(np.random.uniform(low=-1, high=1), device=device), requires_grad=True)
+        lambda2 = t.nn.Parameter(t.tensor(np.random.uniform(low=-1, high=1), device=device), requires_grad=True)
+        temp = t.nn.Parameter(t.tensor(np.random.uniform(low=-2, high=0), device=device), requires_grad=True)
+        h = [lambda1, lambda2, temp]
+
+        student = Cifar_Very_Tiny(10).to(device)
+        optim = t.optim.Adam(student.parameters())
+        optim2 = t.optim.SGD(h,  lr=10e4)
+        hyper_grad_calc = hyperparams.AdamHyperGradCalculator(student, param_loss, hyperparam_loss, optim, h)
+
+        for e in range(epoch_num):
+
+            
+            tq = tqdm.tqdm(zip(tr_load, val_load))
+            losses = []
+            for batch_id, ((x,y), (v_x, v_y)) in enumerate(tq):
+                
+                if mode == 'splines':
+                    mini_e = batch_id // m_e
+                    if mini_e % tr_s_epoch == 0 and batch_id % m_e  == 0:
+                        spline_hist = []
+                        spline_id  = -1
+                    spline_id += 1
+                    
+                x = x.to(device)
+                y = y.to(device)
+
+                batch_logits = t.Tensor(logits[128*batch_id:128*(batch_id+1)]).to(device)
+                
+                if mode == 'opt' or (mode == 'splines' and mini_e % tr_s_epoch == 0):
+                    v_x = v_x.to(device)
+                    v_y = v_y.to(device)
+                    optim2.zero_grad()
+                    hyper_grad_calc.calc_gradients((x,y,batch_logits), (v_x, v_y))
+                    t.nn.utils.clip_grad_value_(h, 1.0)
+                    for h_ in h:
+                        h_.grad = t.where(t.isnan(h_.grad), t.zeros_like(h_.grad), h_.grad)
+                    optim2.step()
+                    
+                if mode == 'splines':
+                    if mini_e % tr_s_epoch == 0:
+                        spline_hist.append([h_.cpu().detach().clone().numpy()  for h_ in h])
+                    else:
+                        spline_out = splines(spline_id)
+                        lambda1.data *= 0
+                        lambda2.data *= 0
+                        temp.data *= 0
+                        lambda1.data += spline_out[0]
+                        lambda2.data += spline_out[1]
+                        temp.data += spline_out[2]
+                    hist.append([h_.grad.cpu().detach().clone().numpy()  for h_ in h])
+                    
+                optim.zero_grad()
+                loss = param_loss((x,y,batch_logits), student,h)
+                losses.append(loss.cpu().detach().numpy())
+                loss.backward()
+                optim.step()
+                tq.set_description('current loss:{}'.format(np.mean(losses[-10:])))
+                
+                if mode == 'splines':
+                    if mini_e % tr_s_epoch == 0 and batch_id%m_e == m_e-1:
+                        fitted1 = np.polyfit(range(len(spline_hist)), np.array(spline_hist)[:,0], 1)
+                        fitted2 = np.polyfit(range(len(spline_hist)), np.array(spline_hist)[:,1], 1)
+                        fitted3 = np.polyfit(range(len(spline_hist)), np.array(spline_hist)[:,2], 1)
+                        splines = lambda x : np.array([np.polyval(fitted1, x), np.polyval(fitted2, x), np.polyval(fitted3, x)])
+
+            if e==0 or (e+1)%validate_every_epoch == 0:
+                test_loss = []
+                student.eval()
+                for x,y in t_load:
+                    x = x.to(device)
+                    y = y.to(device)
+                    test_loss.append(crit(student(x), y).detach().cpu().numpy())
+                test_loss = float(np.mean(test_loss))
+                test_loss2 = []
+                for x,y in t_load:
+                    x = x.to(device)
+                    y = y.to(device)
+                    test_loss2.append(crit(student(x), y).detach().cpu().numpy())
+                print (float(np.mean(test_loss2)))
+
+
+                acc = float(accuracy(student, t_load))
+                student.train()
+                internal_results.append({'epoch': e, 'test loss':test_loss, 'accuracy':acc,
+                                         'temp':float(0.1+9.9*F.sigmoid(h[2]).cpu().detach().numpy()),
+                                         'lambda1':float(F.sigmoid(h[0]).cpu().detach().numpy()),
+                                         'lambda2':float(F.sigmoid(h[1]).cpu().detach().numpy())})
+
+                print (internal_results[-1])
+
+
+        with open('../log/exp'+exp_ver+'_'+filename+'.jsonl', 'a') as out:
+            out.write(json.dumps({'results':internal_results, 'version': exp_ver})+'\n')
+
+            
+def open_data_json(path):
+    with open(path, "r") as read_file:
+        data = [json.loads(line) for line in read_file]
+    return data
+
+
+def plot_data_params(data, s, label, color, sign):
+    e = np.array([data[2]['results'][i]['epoch'] for i in range(len(data[2]['results']))])
+    par = np.array([subdata['results'][i][s] for i in range(len(data[0]['results'])) for subdata in data]).reshape(e.shape[0], -1)
+    plt.plot(e, par.mean(1), '-'+sign, color=color, label=label)
+    plt.fill_between(e, par.mean(1)-par.std(1), par.mean(1)+par.std(1), alpha=0.2, color=color)
