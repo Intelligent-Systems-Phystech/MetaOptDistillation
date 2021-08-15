@@ -1,17 +1,19 @@
-import torch as t 
-from cifar_very_tiny import *
-import numpy as np
-from numpy import polyfit
-from numpy import polyval
+import json
+
 import tqdm
 import matplotlib.pylab as plt
 import matplotlib.cm as cm
-import json
-import hyperparams
-from importlib import reload
+
+import numpy as np
+from numpy import polyfit
+from numpy import polyval
 from scipy.interpolate import interp1d
-import matplotlib.pylab as plt
-import matplotlib.cm as cm
+
+import torch as t 
+from hyperopt import fmin, tpe, hp
+
+import hyperparams
+from cifar_very_tiny import *
 
 device = 'cuda' if t.cuda.is_available() else 'cpu'
 
@@ -47,6 +49,15 @@ def param_loss(batch,model,h):
     x,y,batch_logits = batch    
     lambda1,lambda2,temp = h
     out = model(x)
+    distillation_loss = distill(out, batch_logits, temp)
+    student_loss = crit(out, y)                
+    loss = lambda1 * distillation_loss + lambda2 * student_loss
+    return loss
+
+def param_loss_lambda_reparam(batch,model,h):
+    x,y,batch_logits = batch    
+    lambda1,lambda2,temp = h
+    out = model(x)
     lambda1 = F.sigmoid(lambda1)
     lambda2 = F.sigmoid(lambda2)
     temp = F.sigmoid(temp) * 9.9+0.1
@@ -78,9 +89,9 @@ def cifar_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filename,
             temp = start_temp
             
         elif mode == 'random':
-            lambda1 = t.nn.Parameter(t.tensor(np.random.uniform(low=-1, high=1), device=device), requires_grad=True)
-            lambda2 = t.nn.Parameter(t.tensor(np.random.uniform(low=-1, high=1), device=device), requires_grad=True)
-            temp = t.nn.Parameter(t.tensor(np.random.uniform(low=-2, high=0), device=device), requires_grad=True)
+            lambda1 = t.nn.Parameter(t.tensor(np.random.uniform(low=0.0, high=1.0), device=device), requires_grad=True)
+            lambda2 = t.nn.Parameter(t.tensor(np.random.uniform(low=0.0, high=1.0), device=device), requires_grad=True)
+            temp = t.nn.Parameter(t.tensor(np.random.uniform(low=0.1, high=10.0), device=device), requires_grad=True)
             h = [lambda1, lambda2, temp]
             
         student = Cifar_Very_Tiny(10).to(device)
@@ -102,6 +113,7 @@ def cifar_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filename,
                     out = student(x)
                     student_loss = crit(out, y)
                 
+                # remove???
                 if mode == 'distil':
                     distillation_loss = distill(out, batch_logits, temp)
                     loss = (1-lambda1) * student_loss + lambda1*distillation_loss
@@ -136,31 +148,41 @@ def cifar_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filename,
                     
                 elif mode == 'random':
                     internal_results.append({'epoch': e, 'test loss':test_loss, 'accuracy':acc,
-                                     'temp':float(10*F.sigmoid(h[2]).cpu().detach().numpy()),
-                                     'lambda1':float(F.sigmoid(h[0]).cpu().detach().numpy()),
-                                     'lambda2':float(F.sigmoid(h[1]).cpu().detach().numpy())})
+                                     'temp':float((h[2]).cpu().detach().numpy()),
+                                     'lambda1':float((h[0]).cpu().detach().numpy()),
+                                     'lambda2':float((h[1]).cpu().detach().numpy())})
 
                 print (internal_results[-1])
 
         with open('../log/exp'+exp_ver+'_'+filename+'.jsonl', 'a') as out:
             out.write(json.dumps({'results':internal_results, 'version': exp_ver})+'\n')
             
-# mode = {'opt', 'splines'}
-def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, mode='opt'):
+# mode = {'opt', 'splines', 'no-opt'}
+def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = None,  mode='opt'):
     hist = []
     logits = np.load('../code/logits_cnn.npy')
     for _ in range(run_num):
         internal_results = []
-
+        
         lambda1 = t.nn.Parameter(t.tensor(np.random.uniform(low=-1, high=1), device=device), requires_grad=True)
         lambda2 = t.nn.Parameter(t.tensor(np.random.uniform(low=-1, high=1), device=device), requires_grad=True)
         temp = t.nn.Parameter(t.tensor(np.random.uniform(low=-2, high=0), device=device), requires_grad=True)
+        if lambdas is not None: # non-random initialization
+            lambda1.data *= 0
+            lambda2.data *= 0
+            temp.data *= 0
+            lambda1.data += lambdas[0]
+            lambda2.data += lambdas[1]
+            temp.data += lambdas[2]
+            
         h = [lambda1, lambda2, temp]
 
         student = Cifar_Very_Tiny(10).to(device)
         optim = t.optim.Adam(student.parameters())
         optim2 = t.optim.SGD(h,  lr=10e4)
-        hyper_grad_calc = hyperparams.AdamHyperGradCalculator(student, param_loss, hyperparam_loss, optim, h)
+        if mode in ['splines', 'opt']:
+            hyper_grad_calc = hyperparams.AdamHyperGradCalculator(student, param_loss_with_reparametrization,
+                                                                  hyperparam_loss, optim, h)
 
         for e in range(epoch_num):
 
@@ -205,7 +227,10 @@ def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch,
                     hist.append([h_.grad.cpu().detach().clone().numpy()  for h_ in h])
                     
                 optim.zero_grad()
-                loss = param_loss((x,y,batch_logits), student,h)
+                if mode in ['opt', 'splines']:
+                    loss = param_loss_with_reparametrization((x,y,batch_logits), student,h)
+                else:
+                    loss = param_loss((x,y,batch_logits), student,h)
                 losses.append(loss.cpu().detach().numpy())
                 loss.backward()
                 optim.step()
@@ -236,18 +261,45 @@ def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch,
 
                 acc = float(accuracy(student, t_load))
                 student.train()
-                internal_results.append({'epoch': e, 'test loss':test_loss, 'accuracy':acc,
+                if mode in ['opt', 'splines']:
+                    internal_results.append({'epoch': e, 'test loss':test_loss, 'accuracy':acc,
                                          'temp':float(0.1+9.9*F.sigmoid(h[2]).cpu().detach().numpy()),
                                          'lambda1':float(F.sigmoid(h[0]).cpu().detach().numpy()),
                                          'lambda2':float(F.sigmoid(h[1]).cpu().detach().numpy())})
-
+                else:
+                    val_acc = float(accuracy(student, val_load))
+                    internal_results.append({'epoch': e, 'test loss':test_loss, 'accuracy':acc,
+                                         'temp':float(h[2].cpu().detach().numpy()),
+                                         'lambda1':float(h[0].cpu().detach().numpy()),
+                                         'lambda2':float(h[1].cpu().detach().numpy()), 'val acc':val_acc})
+                    
+                    
+                    
                 print (internal_results[-1])
 
-
-        with open('../log/exp'+exp_ver+'_'+filename+'.jsonl', 'a') as out:
-            out.write(json.dumps({'results':internal_results, 'version': exp_ver})+'\n')
-
+        if filename is not None: # outer function optimization
+            with open('../log/exp'+exp_ver+'_'+filename+'.jsonl', 'a') as out:
+                out.write(json.dumps({'results':internal_results, 'version': exp_ver})+'\n')
+        else:
+            # inner function for hyperopt optimization
+            return max([res['val acc'] for res in internal_results])
             
+
+def cifar_with_hyperopt(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, trial_num):
+    for _ in range(run_num):
+        lambdas = [0.1, 1.0, 1.0]
+        
+        cost_function = lambda lambdas: -cifar_with_validation_set(exp_ver, 1, epoch_num, None, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = lambdas,  mode='no-opt') # validation accuracy * (-1) -> min
+        
+        cost_function(lambdas)
+        best_lambdas = fmin(fn=cost_function,                             
+        space= [ hp.uniform('lambda1', 0.0, 1.0), hp.uniform('lambda2', 0.0, 1.0), hp.uniform('temp', 0.1, 10.0)], 
+        algo=tpe.suggest,
+        max_evals=trial_num)
+        cifar_with_validation_set(exp_ver, 1, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = [best_lambdas['lambda1'], best_lambdas['lambda2'], best_lambdas['temp']],  mode='no-opt')
+
+    
+
 def open_data_json(path):
     with open(path, "r") as read_file:
         data = [json.loads(line) for line in read_file]
