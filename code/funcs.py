@@ -54,7 +54,7 @@ def param_loss(batch,model,h):
     loss = lambda1 * distillation_loss + lambda2 * student_loss
     return loss
 
-def param_loss_lambda_reparam(batch,model,h):
+def param_loss_with_reparametrization(batch,model,h):
     x,y,batch_logits = batch    
     lambda1,lambda2,temp = h
     out = model(x)
@@ -78,6 +78,9 @@ def hyperparam_loss(batch, model):
 
 # mode = {'nodistil', 'distil', 'random'}
 def cifar_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filename, tr_load, t_load, validate_every_epoch, mode='nodistil'):
+    np.random.seed(42)
+    t.manual_seed(42)
+
     if mode != 'nodistil':
         logits = np.load('../code/logits_cnn.npy')
         
@@ -158,7 +161,10 @@ def cifar_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filename,
             out.write(json.dumps({'results':internal_results, 'version': exp_ver})+'\n')
             
 # mode = {'opt', 'splines', 'no-opt'}
-def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = None,  mode='opt'):
+def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = None,  lr = 1.0, clip_grad = 10e-3, mode='opt', no_tqdm = False):
+    np.random.seed(42)
+    t.manual_seed(42)
+
     hist = []
     logits = np.load('../code/logits_cnn.npy')
     for _ in range(run_num):
@@ -167,6 +173,7 @@ def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch,
         lambda1 = t.nn.Parameter(t.tensor(np.random.uniform(low=-1, high=1), device=device), requires_grad=True)
         lambda2 = t.nn.Parameter(t.tensor(np.random.uniform(low=-1, high=1), device=device), requires_grad=True)
         temp = t.nn.Parameter(t.tensor(np.random.uniform(low=-2, high=0), device=device), requires_grad=True)
+        
         if lambdas is not None: # non-random initialization
             lambda1.data *= 0
             lambda2.data *= 0
@@ -179,15 +186,15 @@ def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch,
 
         student = Cifar_Very_Tiny(10).to(device)
         optim = t.optim.Adam(student.parameters())
-        optim2 = t.optim.SGD(h,  lr=10e4)
+        optim2 = t.optim.SGD(h,  lr=lr)
         if mode in ['splines', 'opt']:
             hyper_grad_calc = hyperparams.AdamHyperGradCalculator(student, param_loss_with_reparametrization,
                                                                   hyperparam_loss, optim, h)
 
-        for e in range(epoch_num):
-
-            
+        for e in range(epoch_num):                  
             tq = tqdm.tqdm(zip(tr_load, val_load))
+            if no_tqdm:
+                tq = zip(tr_load, val_load)
             losses = []
             for batch_id, ((x,y), (v_x, v_y)) in enumerate(tq):
                 
@@ -208,7 +215,7 @@ def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch,
                     v_y = v_y.to(device)
                     optim2.zero_grad()
                     hyper_grad_calc.calc_gradients((x,y,batch_logits), (v_x, v_y))
-                    t.nn.utils.clip_grad_value_(h, 1.0)
+                    t.nn.utils.clip_grad_value_(h, clip_grad)
                     for h_ in h:
                         h_.grad = t.where(t.isnan(h_.grad), t.zeros_like(h_.grad), h_.grad)
                     optim2.step()
@@ -234,7 +241,8 @@ def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch,
                 losses.append(loss.cpu().detach().numpy())
                 loss.backward()
                 optim.step()
-                tq.set_description('current loss:{}'.format(np.mean(losses[-10:])))
+                if not no_tqdm:
+                    tq.set_description('current loss:{}'.format(np.mean(losses[-10:])))
                 
                 if mode == 'splines':
                     if mini_e % tr_s_epoch == 0 and batch_id%m_e == m_e-1:
@@ -286,10 +294,13 @@ def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch,
             
 
 def cifar_with_hyperopt(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, trial_num):
+    np.random.seed(42)
+    t.manual_seed(42)
+
     for _ in range(run_num):
         lambdas = [0.1, 1.0, 1.0]
         
-        cost_function = lambda lambdas: -cifar_with_validation_set(exp_ver, 1, epoch_num, None, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = lambdas,  mode='no-opt') # validation accuracy * (-1) -> min
+        cost_function = lambda lambdas: -cifar_with_validation_set(exp_ver, 1, epoch_num, None, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = lambdas,  mode='no-opt', no_tqdm = True) # validation accuracy * (-1) -> min
         
         cost_function(lambdas)
         best_lambdas = fmin(fn=cost_function,                             
