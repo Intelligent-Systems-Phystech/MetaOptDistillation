@@ -37,7 +37,7 @@ sm = nn.Softmax(dim=1)
 def distill(out, batch_logits, temp):    
     g = sm(out/temp)
     f = F.log_softmax(batch_logits/temp)    
-    return kl(f, g)
+    return kl(g, f)
 
 
 crit = nn.CrossEntropyLoss()
@@ -64,13 +64,13 @@ def hyperparam_loss(batch, model):
 
 
 # mode = {'nodistil', 'distil', 'random'}
-def cifar_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filename, tr_load, t_load, validate_every_epoch, class_num=10,  mode='nodistil', logits = '../code/logits_cnn.npy', seed=42, lr0=1.0):
+def cifar_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filename, tr_load, t_load, validate_every_epoch, class_num=10,  mode='nodistil', logits = '../code/logits_cnn.npy', seed=42, lr0=1.0, student_class = Cifar_Very_Tiny ):
     np.random.seed(seed)
     t.manual_seed(seed)
 
     if mode != 'nodistil':
         if isinstance(logits, str):
-            logits = np.load('../code/logits_cnn.npy')
+            logits = np.load(logits)
         
     for _ in range(run_num):
         internal_results = []
@@ -87,7 +87,7 @@ def cifar_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filename,
             #h = [lambda1, lambda2, temp]
             h = [lambda1,  temp]
             
-        student = Cifar_Very_Tiny(class_num).to(device)
+        student = student_class(class_num).to(device)
         optim = t.optim.SGD(student.parameters(), lr=lr0)    
         scheduler = t.optim.lr_scheduler.StepLR(optim, step_size=10, gamma=0.5)   
         
@@ -118,7 +118,6 @@ def cifar_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filename,
                     optim.zero_grad()
                     batch_logits = batch_logits[:x.shape[0]]
                     loss = param_loss((x,y,batch_logits), student,h)
-                    
                 losses.append(loss.cpu().detach().numpy())
                 loss.backward()
                 optim.step()
@@ -153,7 +152,7 @@ def cifar_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filename,
             out.write(json.dumps({'results':internal_results, 'version': exp_ver})+'\n')
             
 # mode = {'opt', 'splines', 'no-opt'}
-def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch,  class_num=10, lambdas = None,  lr0 = 1e-3, lr = 1.0, clip_grad = 10e-3, mode='opt', no_tqdm = False, seed=42, logits = '../code/logits_cnn.npy'):
+def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch,  class_num=10, lambdas = None,  lr0 = 1e-3, lr = 1.0, clip_grad = 10e-3, mode='opt', no_tqdm = False, seed=42, logits = '../code/logits_cnn.npy', student_class = Cifar_Very_Tiny):
     np.random.seed(seed)
     t.manual_seed(seed)
 
@@ -179,7 +178,7 @@ def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch,
         #h = [lambda1, lambda2, temp]
         h = [lambda1, temp]
         
-        student = Cifar_Very_Tiny(class_num).to(device)
+        student = student_class(class_num).to(device)
         optim = t.optim.SGD(student.parameters(), lr=lr0) 
         scheduler = t.optim.lr_scheduler.StepLR(optim, step_size=10, gamma=0.5)               
         optim2 = t.optim.SGD(h,  lr=lr)
@@ -321,13 +320,13 @@ def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch,
             return max([res['val acc'] for res in internal_results])
     
 
-def cifar_with_hyperopt(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, trial_num, lr0=1.0, logits = '../code/logits_cnn.npy'):
+
+def cifar_with_hyperopt(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, trial_num, lr0=1.0, logits = '../code/logits_cnn.npy', student_class = Cifar_Very_Tiny):
     np.random.seed(42)
     t.manual_seed(42)
 
     for _ in range(run_num):
-       
-        cost_function = lambda lambdas: -cifar_with_validation_set(exp_ver, 1, epoch_num, None, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = lambdas,  mode='no-opt', no_tqdm = True,  lr0=lr0, logits=logits) # validation accuracy * (-1) -> min
+        cost_function = lambda lambdas: -cifar_with_validation_set(exp_ver, 1, epoch_num, None, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = lambdas,  mode='no-opt', no_tqdm = True,  lr0=lr0, logits=logits, student_class=student_class) # validation accuracy * (-1) -> min
        
         best_lambdas = fmin(fn=cost_function,                             
         #space= [ hp.uniform('lambda1', 0.0, 1.0), hp.uniform('lambda2', 0.0, 1.0), hp.uniform('temp', 0.1, 10.0)],
@@ -335,7 +334,7 @@ def cifar_with_hyperopt(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, 
         algo=tpe.suggest,
         max_evals=trial_num)
         #cifar_with_validation_set(exp_ver, 1, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = [best_lambdas['lambda1'], best_lambdas['lambda2'], best_lambdas['temp']],  mode='no-opt')
-        cifar_with_validation_set(exp_ver, 1, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = [best_lambdas['lambda1'], best_lambdas['temp']],  mode='no-opt', lr0=lr0, logits=logits)
+        cifar_with_validation_set(exp_ver, 1, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = [best_lambdas['lambda1'], best_lambdas['temp']],  mode='no-opt', lr0=lr0, logits=logits, student_class = student_class)
 
     
 

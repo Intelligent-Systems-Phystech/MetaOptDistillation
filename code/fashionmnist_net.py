@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-
+        
 class FashionMNIST_Net(nn.Module):
     def __init__(self, num_classes=10):
         super(FashionMNIST_Net, self).__init__()
