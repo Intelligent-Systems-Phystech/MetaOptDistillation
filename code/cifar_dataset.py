@@ -53,4 +53,3 @@ def cifar10_loader(data_path='../data', batch_size=128, split_train_val=False,  
       return train_loader_original, valid_loader_original, test_loader
 
     return train_loader_original, test_loader
-

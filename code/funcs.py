@@ -35,8 +35,8 @@ kl = nn.KLDivLoss(reduction='batchmean')
 sm = nn.Softmax(dim=1)
 
 def distill(out, batch_logits, temp):    
-    g = sm(out/temp)
-    f = F.log_softmax(batch_logits/temp)    
+    g = F.log_softmax(out/temp)
+    f = sm(batch_logits/temp)    
     return kl(g, f)
 
 
@@ -83,7 +83,7 @@ def cifar_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filename,
         elif mode == 'random':
             lambda1 = t.nn.Parameter(t.tensor(np.random.uniform(low=0.0, high=1.0), device=device), requires_grad=True)
             #lambda2 = t.nn.Parameter(t.tensor(np.random.uniform(low=0.0, high=1.0), device=device), requires_grad=True)
-            temp = t.nn.Parameter(t.tensor(np.random.uniform(low=0.1, high=10.0), device=device), requires_grad=True)
+            temp = t.nn.Parameter( 10** t.tensor(np.random.uniform(low=-1, high=1), device=device), requires_grad=True)
             #h = [lambda1, lambda2, temp]
             h = [lambda1,  temp]
             
@@ -165,7 +165,7 @@ def cifar_with_validation_set(exp_ver, run_num, epoch_num, filename, tr_s_epoch,
         
         lambda1 = t.nn.Parameter(t.tensor(np.random.uniform(low=0.0, high=1.0), device=device), requires_grad=True)
         #lambda2 = t.nn.Parameter(t.tensor(np.random.uniform(low=0.0, high=1.0), device=device), requires_grad=True)
-        temp = t.nn.Parameter(t.tensor(np.random.uniform(low=0.1, high=10.0), device=device), requires_grad=True)
+        temp = t.nn.Parameter( 10** t.tensor(np.random.uniform(low=-1, high=1), device=device), requires_grad=True)
         
         if lambdas is not None: # non-random initialization
             lambda1.data *= 0
@@ -326,11 +326,11 @@ def cifar_with_hyperopt(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, 
     t.manual_seed(42)
 
     for _ in range(run_num):
-        cost_function = lambda lambdas: -cifar_with_validation_set(exp_ver, 1, epoch_num, None, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = lambdas,  mode='no-opt', no_tqdm = True,  lr0=lr0, logits=logits, student_class=student_class) # validation accuracy * (-1) -> min
+        cost_function = lambda lambdas: -cifar_with_validation_set(exp_ver, 1, epoch_num, None, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = [lambdas[0], 10**lambdas[1]],  mode='no-opt', no_tqdm = True,  lr0=lr0, logits=logits, student_class=student_class) # validation accuracy * (-1) -> min
        
         best_lambdas = fmin(fn=cost_function,                             
         #space= [ hp.uniform('lambda1', 0.0, 1.0), hp.uniform('lambda2', 0.0, 1.0), hp.uniform('temp', 0.1, 10.0)],
-        space= [ hp.uniform('lambda1', 0.0, 1.0), hp.uniform('temp', 0.1, 10.0)],  
+        space= [ hp.uniform('lambda1', 0.0, 1.0), hp.uniform('temp', -1.0, 1.0)],  
         algo=tpe.suggest,
         max_evals=trial_num)
         #cifar_with_validation_set(exp_ver, 1, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = [best_lambdas['lambda1'], best_lambdas['lambda2'], best_lambdas['temp']],  mode='no-opt')

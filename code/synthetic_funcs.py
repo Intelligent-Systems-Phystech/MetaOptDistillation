@@ -8,7 +8,7 @@ import numpy as np
 from numpy import polyfit
 from numpy import polyval
 from scipy.interpolate import interp1d
-
+import torch.nn.functional as F
 import torch as t 
 from hyperopt import fmin, tpe, hp
 
@@ -40,10 +40,11 @@ def accuracy(student, x,y):
 kl = t.nn.KLDivLoss(reduction='batchmean')
 sm = t.nn.Softmax(dim=1)
 
-def distill(out, batch_logits, temp):
-    g = sm(out/temp)
-    f = t.nn.functional.log_softmax(batch_logits/temp)
-    return kl(f, g)
+def distill(out, batch_logits, temp):    
+    g = F.log_softmax(out/temp)
+    f = sm(batch_logits/temp)    
+    return kl(g, f)
+
 
 crit = t.nn.CrossEntropyLoss()
 
@@ -72,9 +73,9 @@ def param_loss(batch,model,h):
 
 
 def hyperparam_loss(batch, model):
-    x,y = batch
+    x,y, te = batch
     out = model(x)
-    student_loss = crit(out, y)            
+    student_loss = crit(out/te, y)            
     return student_loss
 
 
@@ -112,7 +113,7 @@ def synthetic_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filen
             internal_results = []
             lambda1 = t.nn.Parameter(t.tensor(np.random.uniform(low=0.0, high=1.0)), requires_grad=True)
             #lambda2 = t.nn.Parameter(t.tensor(np.random.uniform(low=0.0, high=1.0)), requires_grad=True)
-            temp = t.nn.Parameter(t.tensor(np.random.uniform(low=0.1, high=10.0)), requires_grad=True)
+            temp = t.nn.Parameter(10**t.tensor(np.random.uniform(low=-1.0, high=1.0)), requires_grad=True)
 
         student = LogReg(order)
         optim = t.optim.SGD(student.parameters(), lr=lr0)
@@ -128,7 +129,7 @@ def synthetic_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filen
             optim.step()
 
             student.eval()
-            if e%1000==0:
+            if e%200==0:
 
                 if mode=='random':
                     internal_results.append({'epoch': e,
@@ -140,13 +141,14 @@ def synthetic_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filen
 
                     print(internal_results[-1])
 
-                    with open('../log/synthetic_exp'+exp_ver+'_'+filename+'.jsonl', 'a') as out:
-                        out.write(json.dumps({'results':internal_results, 'version': exp_ver})+'\n')
+                    
                 else:
                     print (accuracy(student, x_test, y_test))
-
+            
             student.train()
             #scheduler.step()
+        with open('../log/synthetic_exp'+exp_ver+'_'+filename+'.jsonl', 'a') as out:
+                out.write(json.dumps({'results':internal_results, 'version': exp_ver})+'\n')
 
 
 # mode = {'opt', 'splines'}
@@ -176,7 +178,7 @@ def synthetic_opt(exp_ver, run_num, epoch_num, filename, teacher, x_train, y_tra
 
             lambda1 = t.nn.Parameter(t.tensor(np.random.uniform(low=0.0, high=1.0)), requires_grad=True)
             #lambda2 = t.nn.Parameter(t.tensor(np.random.uniform(low=0.0, high=1.0)), requires_grad=True)
-            temp = t.nn.Parameter(t.tensor(np.random.uniform(low=0.1, high=10.0)), requires_grad=True)
+            temp = t.nn.Parameter(t.tensor(10**np.random.uniform(low=-1.0, high=1.0)), requires_grad=True)
             
             if lambdas is not None: # non-random initialization
                 lambda1.data *= 0
@@ -202,7 +204,7 @@ def synthetic_opt(exp_ver, run_num, epoch_num, filename, teacher, x_train, y_tra
             teacher.eval()
 
             for e in range(epoch_num):
-
+                
                 if mode == 'splines':
                     e_ = e//epoch_size
                     if e%epoch_size == 0 and e_ % train_splines_every_epoch == 0:
@@ -211,8 +213,9 @@ def synthetic_opt(exp_ver, run_num, epoch_num, filename, teacher, x_train, y_tra
                     spline_id+=1
 
                 if (mode == 'opt') or (mode == 'splines' and e_ % train_splines_every_epoch == 0):
+                    te = .1 #0.1 #1.0 - (e/epoch_num)
                     optim2.zero_grad()
-                    hyper_grad_calc.calc_gradients((x_train,y_train,teacher(x_train)), (x_test, y_test))
+                    hyper_grad_calc.calc_gradients((x_train,y_train,teacher(x_train)), (x_test, y_test, te))
 
 #                     if mode == 'splines':
                     t.nn.utils.clip_grad_value_(h, clip_grad)
@@ -273,7 +276,7 @@ def synthetic_opt(exp_ver, run_num, epoch_num, filename, teacher, x_train, y_tra
                 if mode in ['opt', 'splines']:
                     student.train()
 
-                if e%1000==0:
+                if e%200==0:
                     student.eval()
 
                     if mode == 'splines':
@@ -304,6 +307,9 @@ def synthetic_opt(exp_ver, run_num, epoch_num, filename, teacher, x_train, y_tra
                                                  #'temp':float(h[2]),
                                                  'temp':float(h[1]),
                                                  'lambda1':float(h[0]),
+                                                 'te2':te,
+                                                 'test loss':crit(student(x_test)/te, y_test).item(),
+                                                 
                                                  })# 'lambda2':float(h[1])})
                     
                     print(internal_results[-1])

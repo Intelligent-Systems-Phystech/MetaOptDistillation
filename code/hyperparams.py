@@ -118,6 +118,7 @@ class AdamHyperGradCalculator():
         norm = torch.cat([w.view(-1) for w in dw]).norm()
 
         eps = 1e-2 / norm
+      
 
         # w+ = w + eps*dw`
         with torch.no_grad():
