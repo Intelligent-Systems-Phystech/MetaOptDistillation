@@ -334,7 +334,7 @@ def cifar_with_hyperopt(exp_ver, run_num, epoch_num, filename, tr_s_epoch, m_e, 
         algo=tpe.suggest,
         max_evals=trial_num)
         #cifar_with_validation_set(exp_ver, 1, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = [best_lambdas['lambda1'], best_lambdas['lambda2'], best_lambdas['temp']],  mode='no-opt')
-        cifar_with_validation_set(exp_ver, 1, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = [best_lambdas['lambda1'], best_lambdas['temp']],  mode='no-opt', lr0=lr0, logits=logits, student_class = student_class)
+        cifar_with_validation_set(exp_ver, 1, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = [best_lambdas['lambda1'], 10**best_lambdas['temp']],  mode='no-opt', lr0=lr0, logits=logits, student_class = student_class)
 
     
 

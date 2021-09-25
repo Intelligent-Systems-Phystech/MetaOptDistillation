@@ -108,9 +108,9 @@ def synthetic_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filen
     for _ in range(run_num):
         lambda1 = start_lambda1
         temp = start_temp
-
+        internal_results = []
         if mode=='random':
-            internal_results = []
+            
             lambda1 = t.nn.Parameter(t.tensor(np.random.uniform(low=0.0, high=1.0)), requires_grad=True)
             #lambda2 = t.nn.Parameter(t.tensor(np.random.uniform(low=0.0, high=1.0)), requires_grad=True)
             temp = t.nn.Parameter(10**t.tensor(np.random.uniform(low=-1.0, high=1.0)), requires_grad=True)
@@ -130,8 +130,7 @@ def synthetic_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filen
 
             student.eval()
             if e%200==0:
-
-                if mode=='random':
+               
                     internal_results.append({'epoch': e,
                                              'accuracy':float(accuracy(student, x_test, y_test)),
                                              #'temp':float(h[2]),
@@ -142,8 +141,7 @@ def synthetic_base(exp_ver, run_num, epoch_num, start_lambda1, start_temp, filen
                     print(internal_results[-1])
 
                     
-                else:
-                    print (accuracy(student, x_test, y_test))
+              
             
             student.train()
             #scheduler.step()
@@ -202,7 +200,7 @@ def synthetic_opt(exp_ver, run_num, epoch_num, filename, teacher, x_train, y_tra
                                                                       hyperparam_loss, optim, h)
 
             teacher.eval()
-
+            te = .1 
             for e in range(epoch_num):
                 
                 if mode == 'splines':
@@ -213,7 +211,7 @@ def synthetic_opt(exp_ver, run_num, epoch_num, filename, teacher, x_train, y_tra
                     spline_id+=1
 
                 if (mode == 'opt') or (mode == 'splines' and e_ % train_splines_every_epoch == 0):
-                    te = .1 #0.1 #1.0 - (e/epoch_num)
+                    #0.1 #1.0 - (e/epoch_num)
                     optim2.zero_grad()
                     hyper_grad_calc.calc_gradients((x_train,y_train,teacher(x_train)), (x_test, y_test, te))
 
@@ -259,8 +257,8 @@ def synthetic_opt(exp_ver, run_num, epoch_num, filename, teacher, x_train, y_tra
                 optim.zero_grad()
                 out = student(x_train)
 
-                if mode in ['opt', 'splines']:
-                    loss = param_loss((x_train,y_train,teacher(x_train)), student,h)
+
+                loss = param_loss((x_train,y_train,teacher(x_train)), student,h)
 #                 elif mode == 'random':
 #                     loss = param_loss_old((x_train,y_train,teacher(x_train)), student,h)
 
@@ -300,9 +298,8 @@ def synthetic_opt(exp_ver, run_num, epoch_num, filename, teacher, x_train, y_tra
 #                         lambda1_final = float(lambda1.detach().numpy())
 #                         lambda2_final = float(lambda2.detach().numpy())
 #                         temp_final = float(temp.detach().numpy())
-
-                    if mode in ['opt', 'splines']:
-                        internal_results.append({'epoch': e,
+                   
+                    internal_results.append({'epoch': e,
                                                  'accuracy':float(accuracy(student, x_test, y_test)),
                                                  #'temp':float(h[2]),
                                                  'temp':float(h[1]),
@@ -322,15 +319,15 @@ def synthetic_opt(exp_ver, run_num, epoch_num, filename, teacher, x_train, y_tra
 #                     splines = lambda x : np.array([np.polyval(fitted1, x), np.polyval(fitted2, x), np.polyval(fitted3, x)])
 
             if filename is not None: # outer function optimization
-                if mode == 'opt':# or mode == 'random':
+                if mode == 'opt' or mode=='no-opt':# or mode == 'random':
                     path = '../log/synthetic_exp'+exp_ver+'_'+filename+'.jsonl'
                 elif mode == 'splines':
                     path = '../log/synthetic_exp'+exp_ver+'_'+filename+'_esize_{}_period_{}.jsonl'.format(epoch_size, train_splines_every_epoch)
                 with open(path, 'a') as out:
                     out.write(json.dumps({'results':internal_results, 'version': exp_ver})+'\n')
-#         else:
-#                 # inner function for hyperopt optimization
-#                 return max([res['val acc'] for res in internal_results])
+            else:
+                 # inner function for hyperopt optimization
+                 return ([res['accuracy'] for res in internal_results][-1])
 
 
 def open_data_json(path):
@@ -348,3 +345,21 @@ def plot_data_params(data, s, label, color, sign):
     par = np.array([subdata['results'][i][s] for i in range(len(data[0]['results'])) for subdata in data]).reshape(e.shape[0], -1)
     plt.plot(e, par.mean(1), '-'+sign, color=color, label=label)
     plt.fill_between(e, par.mean(1)-par.std(1), par.mean(1)+par.std(1), alpha=0.2, color=color)
+    
+    
+def synthetic_with_hyperopt(exp_ver, run_num, epoch_num, filename, teacher, x_train, y_train, x_test, y_test, alg_pars, lambdas = None, lr0 = 1e-3, lr = 1.0, clip_grad = 10e-3, mode='opt', seed=42, trial_num=5):
+    np.random.seed(42)
+    t.manual_seed(42)
+
+    for _ in range(run_num):
+        cost_function = lambda lambdas: -synthetic_opt(exp_ver, 1, epoch_num, None, teacher, x_train, y_train, x_test, y_test, alg_pars, lambdas = [lambdas[0], 10**lambdas[1]], lr0 = lr0, lr = lr, clip_grad = 10e-3, mode='no-opt', seed=42) # validation accuracy * (-1) -> min
+       
+        best_lambdas = fmin(fn=cost_function,                             
+        #space= [ hp.uniform('lambda1', 0.0, 1.0), hp.uniform('lambda2', 0.0, 1.0), hp.uniform('temp', 0.1, 10.0)],
+        space= [ hp.uniform('lambda1', 0.0, 1.0), hp.uniform('temp', -1.0, 1.0)],  
+        algo=tpe.suggest,
+        max_evals=trial_num)
+        #cifar_with_validation_set(exp_ver, 1, epoch_num, filename, tr_s_epoch, m_e, tr_load, t_load, val_load, validate_every_epoch, lambdas = [best_lambdas['lambda1'], best_lambdas['lambda2'], best_lambdas['temp']],  mode='no-opt')
+        synthetic_opt(exp_ver, 1, epoch_num, filename, teacher, x_train, y_train, x_test, y_test, alg_pars, lambdas = [best_lambdas['lambda1'], 10**best_lambdas['temp']], lr0 = lr0, lr = lr, clip_grad = 10e-3, mode='no-opt', seed=42)
+
+        
